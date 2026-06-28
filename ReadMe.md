@@ -4,14 +4,23 @@ A production-oriented application for converting Urdu PDF documents into editabl
 
 ## Milestone 1
 
-This milestone sets up the backend foundation only:
+This milestone sets up the backend foundation:
 
 - Python package structure for future conversion modules
 - FastAPI application shell
 - Health-check endpoint
 - Basic backend tests
 
-PDF upload, OCR, extraction, layout preservation, Unicode normalization, and DOCX export will be implemented in later milestones.
+## Milestone 2
+
+This milestone adds PDF upload only:
+
+- `POST /upload` multipart endpoint
+- PDF extension and `application/pdf` content-type validation
+- UUID-based local storage under `uploads/`
+- Upload metadata response
+
+OCR, extraction, layout preservation, Unicode normalization, and DOCX export will be implemented in later milestones.
 
 ## Backend setup
 
@@ -38,6 +47,26 @@ Then open:
 - `http://127.0.0.1:8000/`
 - `http://127.0.0.1:8000/health`
 
+Upload a PDF:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import httpx
+
+sample = Path('sample.pdf')
+sample.write_bytes(b'%PDF-1.7\n')
+with sample.open('rb') as pdf:
+    response = httpx.post(
+        'http://127.0.0.1:8000/upload',
+        files={'file': ('sample.pdf', pdf, 'application/pdf')},
+    )
+print(response.status_code)
+print(response.json())
+sample.unlink()
+PY
+```
+
 ## Current structure
 
 ```text
@@ -49,6 +78,7 @@ ocr/
 layout/
 exporter/
 services/
+  upload_service.py
 models/
 uploads/
 output/
