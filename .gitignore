@@ -12,6 +12,34 @@ dist
 dist-ssr
 *.local
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets.*
+credentials.*
+
+# Runtime document data
+uploads/*
+!uploads/.gitkeep
+output/*
+!output/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
