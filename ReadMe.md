@@ -1,16 +1,57 @@
-# React + Vite
+# Urdu PDF to Word Converter
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A production-oriented application for converting Urdu PDF documents into editable Microsoft Word (`.docx`) files.
 
-Currently, two official plugins are available:
+## Milestone 1
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This milestone sets up the backend foundation only:
 
-## React Compiler
+- Python package structure for future conversion modules
+- FastAPI application shell
+- Health-check endpoint
+- Basic backend tests
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+PDF upload, OCR, extraction, layout preservation, Unicode normalization, and DOCX export will be implemented in later milestones.
 
-## Expanding the ESLint configuration
+## Backend setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Start the API:
+
+```bash
+python -m uvicorn backend.app:app --reload
+```
+
+Then open:
+
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/health`
+
+## Current structure
+
+```text
+backend/
+  app.py
+  config.py
+extractor/
+ocr/
+layout/
+exporter/
+services/
+models/
+uploads/
+output/
+tests/
+requirements.txt
+```
