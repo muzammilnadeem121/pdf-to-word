@@ -23,8 +23,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-
+from models.layout_block import LayoutBlock, BlockType, Alignment
 from extractor.extractor import ExtractionResult, PageResult
+from docx.shared import Inches, Pt
+from docx.oxml import OxmlElement
+
 
 logger = logging.getLogger(__name__)
 
@@ -256,3 +259,178 @@ class WordExporter:
             # WD_BREAK.PAGE = 0  — use the integer to avoid import clutter
             __import__("docx.enum.text", fromlist=["WD_BREAK"]).WD_BREAK.PAGE
         )
+    def export_layout(
+        self, blocks: list[LayoutBlock], output_path: str
+    ) -> str:
+        """
+        Write a DOCX from a list of LayoutBlocks.
+
+        This is the primary export path from Milestone 8 onwards.
+        Uses heading styles, correct spacing, bold, italic, and
+        alignment from the detected layout.
+
+        Parameters
+        ----------
+        blocks      : From LayoutDetector.detect()
+        output_path : Full path for the output .docx file
+
+        Returns
+        -------
+        str : Resolved output path
+        """
+        if not blocks:
+            raise ValueError("No layout blocks to export.")
+
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+
+        doc = Document()
+        _set_document_rtl(doc)
+
+        current_page = None
+
+        for block in blocks:
+            # Insert page break when page changes
+            if current_page is not None and block.page_number != current_page:
+                self._add_page_break(doc)
+            current_page = block.page_number
+
+            # Skip page numbers — they're noise in a reflowed DOCX
+            if block.is_page_number:
+                continue
+            elif block.is_image:
+                self._write_image_block(doc, block)
+            elif block.is_table:
+                self._write_table_block(doc, block)
+            elif block.is_heading:
+                self._write_layout_heading(doc, block)
+            else:
+                self._write_layout_paragraph(doc, block)
+                
+        try:
+            doc.save(str(out))
+            logger.info("DOCX (layout) saved: %s", out)
+        except Exception as exc:
+            raise IOError(f"Could not save DOCX: {exc}") from exc
+
+        return str(out)
+
+    def _write_layout_heading(self, doc: Document, block: LayoutBlock) -> None:
+        """Write a heading block using Word's built-in Heading styles."""
+        level = block.heading_level or 2
+        level = max(1, min(level, 3))  # clamp to 1–3
+
+        para = doc.add_heading(level=level)
+        _set_paragraph_rtl(para)
+
+        if block.alignment == Alignment.CENTER:
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        else:
+            para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        run = para.add_run(block.text)
+        run.font.name = self.font_name
+        if block.font_size:
+            run.font.size = Pt(block.font_size)
+        _set_run_rtl(run)
+
+    def _write_layout_paragraph(self, doc: Document, block: LayoutBlock) -> None:
+        """Write a body/caption block with spacing, bold, italic."""
+        para = doc.add_paragraph()
+        _set_paragraph_rtl(para)
+
+        # Paragraph spacing
+        if block.space_before > 0:
+            para.paragraph_format.space_before = Pt(
+                min(block.space_before, 24)  # cap at 24pt
+            )
+
+        # Alignment
+        if block.alignment == Alignment.CENTER:
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        elif block.alignment == Alignment.LEFT:
+            para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        else:
+            para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        run = para.add_run(block.text)
+        run.font.name  = self.font_name
+        run.font.size  = Pt(block.font_size) if block.font_size else self.font_size
+        run.font.bold  = block.is_bold
+        run.font.italic = block.is_italic
+        _set_run_rtl(run)
+
+    def _write_image_block(self, doc: Document, block: LayoutBlock) -> None:
+        """
+        Embed an extracted image into the DOCX.
+
+        Scales the image to fit within the page content width (6 inches)
+        while preserving the original aspect ratio.
+        """
+        if not block.image_path or not Path(block.image_path).exists():
+            logger.warning("Image file not found: %s — skipping.", block.image_path)
+            return
+
+        try:
+            max_width_inches = 6.0
+
+            if block.image_width and block.image_height and block.image_width > 0:
+                # Convert points to inches (72 points per inch)
+                width_inches  = min(block.image_width / 72, max_width_inches)
+                aspect        = block.image_height / block.image_width
+                height_inches = width_inches * aspect
+                doc.add_picture(block.image_path, width=Inches(width_inches))
+            else:
+                doc.add_picture(block.image_path, width=Inches(max_width_inches))
+
+            # Centre the image paragraph
+            last_para = doc.paragraphs[-1]
+            last_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        except Exception as exc:
+            logger.warning("Could not embed image %s: %s", block.image_path, exc)
+            # Add a text placeholder so the reader knows an image was here
+            para = doc.add_paragraph()
+            run  = para.add_run(f"[ Image ]")
+            run.font.italic = True
+            run.font.color.rgb = PLACEHOLDER_COLOR
+
+    def _write_table_block(self, doc: Document, block: LayoutBlock) -> None:
+        """
+        Render a detected table into the DOCX.
+
+        Creates a python-docx Table with one cell per detected cell.
+        Applies light borders and RTL direction to every cell.
+        """
+        if not block.table_data:
+            return
+
+        rows    = len(block.table_data)
+        cols    = max(len(row) for row in block.table_data)
+
+        try:
+            table = doc.add_table(rows=rows, cols=cols)
+            table.style = "Table Grid"
+
+            for r_idx, row_data in enumerate(block.table_data):
+                for c_idx, cell_text in enumerate(row_data):
+                    if c_idx >= cols:
+                        break
+                    cell      = table.cell(r_idx, c_idx)
+                    cell.text = cell_text.strip()
+
+                    # Apply RTL to cell paragraphs
+                    for para in cell.paragraphs:
+                        _set_paragraph_rtl(para)
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        for run in para.runs:
+                            run.font.name = self.font_name
+                            run.font.size = Pt(11)
+                            _set_run_rtl(run)
+
+        except Exception as exc:
+            logger.warning("Could not write table: %s", exc)
+            # Fallback: write cells as tab-separated text
+            para = doc.add_paragraph()
+            for row in block.table_data:
+                para.add_run(" | ".join(cell for cell in row) + "\n")
