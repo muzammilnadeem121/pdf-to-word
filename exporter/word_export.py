@@ -173,16 +173,19 @@ class WordExporter:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _write_page(self, doc: Document, page: PageResult) -> None:
-        """Write a single page's content into the document."""
         if page.error:
             self._write_error_placeholder(doc, page.page_number, page.error)
         elif page.is_scanned:
-            self._write_scanned_placeholder(doc, page.page_number)
-        elif page.is_mixed:
-            # Write whatever text was extracted, then add an OCR-pending note
-            if page.raw_text:
+            if page.ocr_result and not page.ocr_result.is_empty:
+                # OCR succeeded — write the recognized text
                 self._write_text(doc, page)
-            self._write_mixed_note(doc, page.page_number)
+            else:
+                # OCR not run or returned nothing — show placeholder
+                self._write_scanned_placeholder(doc, page.page_number)
+        elif page.is_mixed:
+            self._write_text(doc, page)
+            if not page.ocr_result or page.ocr_result.is_empty:
+                self._write_mixed_note(doc, page.page_number)
         else:
             self._write_text(doc, page)
 
@@ -199,24 +202,18 @@ class WordExporter:
 
     def _write_text(self, doc: Document, page: PageResult) -> None:
         """
-        Write the extracted text of a digital page.
-
-        Splits on newlines to create separate paragraphs, which mirrors
-        the visual line structure of the original PDF better than dumping
-        all text into one paragraph.
+        Write the best available text for a page.
+        Uses final_text which merges direct extraction + OCR results.
         """
-        text = page.raw_text or ""
-        # Split into non-empty lines
+        text = page.final_text   # ← was page.raw_text
         lines = [line for line in text.splitlines() if line.strip()]
 
         if not lines:
-            # Page had text characters but they were all whitespace — skip
             return
 
         for line in lines:
             para = doc.add_paragraph()
             _set_paragraph_rtl(para)
-
             run = para.add_run(line.strip())
             run.font.name = self.font_name
             run.font.size = self.font_size

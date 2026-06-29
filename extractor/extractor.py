@@ -3,11 +3,11 @@ PDFExtractor
 ------------
 Main text extraction class for the Urdu PDF converter.
 
-Milestone 5 update:
-  - PageResult now carries a full PageClassification (type, confidence, reason)
-    instead of just a boolean is_scanned flag.
-  - MIXED pages get text extracted AND are flagged for OCR.
-  - The ExtractionResult summary now includes mixed_pages count.
+Milestone 6 update:
+  - Accepts an optional BaseOCREngine.
+  - SCANNED pages are processed by OCR.
+  - MIXED pages get direct extraction + OCR merged together.
+  - OCR results are stored on PageResult for downstream use.
 """
 
 import logging
@@ -19,6 +19,7 @@ import fitz
 
 from extractor.scanner import ScanDetector
 from models.page_classification import PageClassification, PageType
+from models.ocr_result import OCRResult
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +35,20 @@ class PageResult:
 
     Attributes
     ----------
-    page_number     : 1-based page number.
-    classification  : Full PageClassification from ScanDetector.
-    raw_text        : Extracted text (None if scanned, partial if mixed).
-    char_count      : Non-whitespace character count.
-    error           : Error message if extraction failed.
+    page_number    : 1-based page number.
+    classification : Full PageClassification from ScanDetector.
+    raw_text       : Text from direct extraction (digital/mixed pages).
+    ocr_result     : OCRResult if OCR was run on this page, else None.
+    char_count     : Non-whitespace character count of the final text.
+    error          : Error message if extraction failed.
     """
     page_number:    int
     classification: PageClassification
-    raw_text:       Optional[str] = None
-    char_count:     int = 0
-    error:          Optional[str] = None
+    raw_text:       Optional[str]       = None
+    ocr_result:     Optional[OCRResult] = None
+    char_count:     int                 = 0
+    error:          Optional[str]       = None
 
-    # Convenience pass-throughs so callers don't need to touch classification
     @property
     def is_scanned(self) -> bool:
         return self.classification.is_scanned
@@ -67,20 +69,35 @@ class PageResult:
     def confidence(self) -> float:
         return self.classification.confidence
 
+    @property
+    def final_text(self) -> str:
+        """
+        The best available text for this page.
+
+        Priority:
+          1. For SCANNED pages: OCR text only.
+          2. For MIXED pages: direct text + OCR text merged.
+          3. For DIGITAL pages: direct text only.
+          4. Empty string if nothing was extracted.
+        """
+        if self.is_scanned:
+            return self.ocr_result.full_text if self.ocr_result else ""
+
+        if self.is_mixed:
+            parts = []
+            if self.raw_text and self.raw_text.strip():
+                parts.append(self.raw_text.strip())
+            if self.ocr_result and not self.ocr_result.is_empty:
+                parts.append(self.ocr_result.full_text.strip())
+            return "\n".join(parts)
+
+        return self.raw_text or ""
+
 
 @dataclass
 class ExtractionResult:
     """
     Full extraction result for an entire PDF document.
-
-    Attributes
-    ----------
-    file_path     : Path to the source PDF.
-    total_pages   : Total page count.
-    digital_pages : Pages extracted directly.
-    scanned_pages : Pages that need OCR.
-    mixed_pages   : Pages needing both extraction and OCR.
-    pages         : Per-page results in order.
     """
     file_path:     str
     total_pages:   int
@@ -96,20 +113,27 @@ class ExtractionResult:
 
 class PDFExtractor:
     """
-    Extracts text from a PDF, classifying each page via ScanDetector.
+    Extracts text from a PDF, with optional OCR for scanned pages.
 
     Parameters
     ----------
     scan_detector : ScanDetector, optional
-        Injectable detector. Defaults to ScanDetector() with standard settings.
+    ocr_engine    : BaseOCREngine, optional
+        If provided, SCANNED and MIXED pages are processed by OCR.
+        If None, scanned pages will have no text (placeholder in DOCX).
     """
 
-    def __init__(self, scan_detector: Optional[ScanDetector] = None) -> None:
-        self._detector = scan_detector or ScanDetector()
+    def __init__(
+        self,
+        scan_detector=None,
+        ocr_engine=None,
+    ) -> None:
+        self._detector  = scan_detector or ScanDetector()
+        self._ocr       = ocr_engine  # None = OCR disabled
 
     def extract(self, pdf_path: str) -> ExtractionResult:
         """
-        Run extraction on an entire PDF file.
+        Run full extraction on a PDF file.
 
         Parameters
         ----------
@@ -118,10 +142,6 @@ class PDFExtractor:
         Returns
         -------
         ExtractionResult
-
-        Raises
-        ------
-        FileNotFoundError, ValueError
         """
         path = Path(pdf_path)
 
@@ -173,28 +193,36 @@ class PDFExtractor:
         return extraction
 
     def _extract_page(self, page: fitz.Page) -> PageResult:
-        """Classify and extract a single page."""
+        """Classify, extract, and optionally OCR a single page."""
         page_num       = page.number + 1
         classification = self._detector.classify(page)
+        raw_text       = None
+        ocr_result     = None
 
         try:
+            # ── Direct text extraction ────────────────────────────────
             if classification.needs_extraction:
-                # DIGITAL or MIXED — pull the text layer
-                raw_text  = page.get_text("text")
-                char_count = len(
-                    raw_text.strip().replace(" ", "").replace("\n", "")
-                )
-            else:
-                # SCANNED — no usable text layer
-                raw_text   = None
-                char_count = 0
+                raw_text = page.get_text("text")
 
-            return PageResult(
+            # ── OCR ───────────────────────────────────────────────────
+            if classification.needs_ocr and self._ocr is not None:
+                logger.info("Running OCR on page %d (%s)...", page_num, classification.page_type.value)
+                ocr_result = self._ocr.process_page(page, page_num)
+            elif classification.needs_ocr and self._ocr is None:
+                logger.debug(
+                    "Page %d needs OCR but no engine configured — will use placeholder.",
+                    page_num,
+                )
+
+            # ── Char count from final text ────────────────────────────
+            result = PageResult(
                 page_number    = page_num,
                 classification = classification,
                 raw_text       = raw_text,
-                char_count     = char_count,
+                ocr_result     = ocr_result,
             )
+            result.char_count = len(result.final_text.replace(" ", "").replace("\n", ""))
+            return result
 
         except Exception as exc:
             logger.error("Failed to process page %d: %s", page_num, exc)
@@ -202,6 +230,7 @@ class PDFExtractor:
                 page_number    = page_num,
                 classification = classification,
                 raw_text       = None,
+                ocr_result     = None,
                 char_count     = 0,
                 error          = str(exc),
             )
