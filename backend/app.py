@@ -7,9 +7,17 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from services.converter import ConversionService
+from fastapi.middleware.cors import CORSMiddleware
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=settings.app_version)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     logger = logging.getLogger(__name__)
     _conversion_service = ConversionService()
 
