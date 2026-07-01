@@ -8,7 +8,7 @@ import './index.css'
 export default function App() {
   const { stage, fileName, result, error, convert, reset } = useConversion()
 
-  const isBusy = stage === Stage.UPLOADING || stage === Stage.CONVERTING
+  const isBusy = stage !== Stage.IDLE && stage !== Stage.DONE && stage !== Stage.ERROR
 
   return (
     <div className="app">

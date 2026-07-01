@@ -52,3 +52,5 @@ output/*
 *.sw?
 
 claude.md
+
+*.zip
