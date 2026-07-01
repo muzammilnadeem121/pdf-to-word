@@ -124,7 +124,7 @@ class ScanDetector:
         self,
         min_chars:               int   = 20,
         scanned_image_threshold: float = 0.85,
-        mixed_image_threshold:   float = 0.40,
+        mixed_image_threshold:   float = 0.65,
         min_urdu_ratio:          float = 0.30,
     ) -> None:
         self.min_chars               = min_chars

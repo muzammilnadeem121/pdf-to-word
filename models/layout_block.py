@@ -70,6 +70,11 @@ class LayoutBlock:
     image_width:   Optional[float]          = None
     image_height:  Optional[float]          = None
     table_data:    list[list[str]]          = field(default_factory=list)
+    background_color: Optional[tuple[int,int,int]] = None
+    border_color:     Optional[tuple[int,int,int]] = None
+    border_width:     float = 0.0
+    text_color:       Optional[tuple[int,int,int]] = None
+
 
     @property
     def is_heading(self) -> bool:

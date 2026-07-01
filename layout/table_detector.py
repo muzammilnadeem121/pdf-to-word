@@ -83,54 +83,50 @@ class TableDetector:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _extract_table(
-        self,
-        table,
-        page_number: int,
-    ) -> Optional[LayoutBlock]:
-        """
-        Convert a pdfplumber Table into a LayoutBlock.
+    # layout/table_detector.py — replace _extract_table
 
-        Returns None if the table is too small to be meaningful.
-        """
+    def _extract_table(self, table, page_number: int) -> Optional[LayoutBlock]:
         try:
             rows: list[list[str]] = table.extract()
-
             if not rows:
                 return None
 
-            # Filter out completely empty rows
             rows = [row for row in rows if any(cell for cell in row if cell)]
-
             if len(rows) < self.min_rows:
                 return None
 
-            # Ensure minimum column count
             max_cols = max(len(row) for row in rows)
             if max_cols < self.min_cols:
                 return None
 
-            # Normalise: replace None with "", strip whitespace,
-            # and pad short rows so all rows have the same width
             cleaned: list[list[str]] = []
             for row in rows:
-                cleaned_row = [
-                    (cell or "").strip()
-                    for cell in row
-                ]
-                # Pad to max_cols if this row is shorter
+                cleaned_row = [(cell or "").strip() for cell in row]
                 while len(cleaned_row) < max_cols:
                     cleaned_row.append("")
                 cleaned.append(cleaned_row)
 
-            # Get table position for ordering with surrounding text
-            bbox      = table.bbox   # (x0, top, x1, bottom)
-            top_y     = bbox[1] if bbox else 0.0
-
-            logger.debug(
-                "Page %d: table %d×%d at y=%.0f",
-                page_number, len(cleaned), max_cols, top_y,
+            # ── NEW: reject false tables ──────────────────────────────
+            # Count cells that are empty or very short (≤2 chars).
+            # Real tables have content in most cells.
+            # News column layouts have mostly empty cells.
+            total_cells = len(cleaned) * max_cols
+            empty_cells = sum(
+                1 for row in cleaned for cell in row
+                if len(cell) <= 2
             )
+            empty_ratio = empty_cells / total_cells if total_cells > 0 else 1.0
+
+            if empty_ratio > 0.5:
+                logger.debug(
+                    "Page %d: rejecting false table — %.0f%% empty cells.",
+                    page_number, empty_ratio * 100,
+                )
+                return None
+            # ─────────────────────────────────────────────────────────
+
+            bbox  = table.bbox
+            top_y = bbox[1] if bbox else 0.0
 
             return LayoutBlock(
                 text         = "",
@@ -141,7 +137,5 @@ class TableDetector:
             )
 
         except Exception as exc:
-            logger.warning(
-                "Failed to extract table on page %d: %s", page_number, exc
-            )
+            logger.warning("Failed to extract table on page %d: %s", page_number, exc)
             return None

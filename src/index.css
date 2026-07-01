@@ -204,3 +204,62 @@ body {
   font-size: 18px;
   cursor: pointer;
 }
+
+/* Progress tracker additions */
+
+.progress-tracker__filename {
+  font-weight: 500;
+  font-size: 15px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-break: break-all;
+}
+
+.progress-tracker__fileicon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.progress-tracker__bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f2;
+}
+
+.progress-tracker__bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #f0f0f2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-tracker__bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #008080;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-tracker__pct {
+  font-size: 13px;
+  font-weight: 500;
+  color: #008080;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Active step pulse animation */
+.progress-tracker__step--active .progress-tracker__marker {
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}

@@ -270,16 +270,20 @@ class TestFallback:
 
 class TestExportLayout:
 
+    # tests/test_layout.py — update _make_blocks inside TestExportLayout
+
     def _make_blocks(self) -> list[LayoutBlock]:
         return [
             LayoutBlock(
                 text="عنوان", block_type=BlockType.HEADING,
                 page_number=1, heading_level=1, is_rtl=True,
+                background_color=None, border_color=None,
             ),
             LayoutBlock(
                 text="یہ ایک لمبا جملہ ہے جو عام متن کی طرح ہے",
                 block_type=BlockType.BODY,
                 page_number=1, is_rtl=True,
+                background_color=None, border_color=None,
             ),
             LayoutBlock(
                 text="1", block_type=BlockType.PAGE_NUM, page_number=1,
@@ -287,6 +291,7 @@ class TestExportLayout:
             LayoutBlock(
                 text="دوسرا صفحہ", block_type=BlockType.BODY,
                 page_number=2, is_rtl=True,
+                background_color=None, border_color=None,
             ),
         ]
 
@@ -320,6 +325,7 @@ class TestExportLayout:
             LayoutBlock(
                 text="굵은 متن", block_type=BlockType.BODY,
                 page_number=1, is_bold=True, is_rtl=True,
+                background_color=None, border_color=None,
             )
         ]
         out = tmp_path / "bold.docx"

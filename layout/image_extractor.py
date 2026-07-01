@@ -30,7 +30,7 @@ from models.layout_block import BlockType, LayoutBlock
 logger = logging.getLogger(__name__)
 
 # Images smaller than this area (in PDF points²) are skipped
-_MIN_IMAGE_AREA = 50 * 50   # 50×50 points ≈ 0.7 × 0.7 inches
+_MIN_IMAGE_AREA = 150 * 150   # 150×150 points ≈ 2 × 2 inches
 
 # Where extracted images are stored
 _IMAGE_CACHE_DIR = Path("output") / "_images"
@@ -50,13 +50,17 @@ class ImageExtractor:
         self,
         min_area:  float = _MIN_IMAGE_AREA,
         cache_dir: Path  = _IMAGE_CACHE_DIR,
+        max_images_per_page: int = 2,
+        skip_if_chars_above: int = 200
     ) -> None:
         self.min_area  = min_area
         self.cache_dir = cache_dir
+        self.max_images_per_page = max_images_per_page
+        self.skip_if_chars_above = skip_if_chars_above
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def extract_page_images(
-        self, doc: fitz.Document, page: fitz.Page, page_number: int
+        self, doc: fitz.Document, page: fitz.Page, page_number: int, char_count: int = 0
     ) -> list[LayoutBlock]:
         """
         Extract all qualifying images from a single PDF page.
@@ -72,6 +76,13 @@ class ImageExtractor:
         list[LayoutBlock]
             One IMAGE block per extracted image, in top-to-bottom order.
         """
+        if char_count > self.skip_if_chars_above:
+            logger.debug(
+                "Page %d: skipping image extraction (%d chars > threshold %d).",
+                page_number, char_count, self.skip_if_chars_above,
+            )
+            return []
+
         image_blocks: list[LayoutBlock] = []
         seen_xrefs:   set[int]          = set()
 
@@ -82,9 +93,10 @@ class ImageExtractor:
             return []
 
         for img_info in images:
-            xref = img_info[0]
+            if len(image_blocks) >= self.max_images_per_page:
+                break
 
-            # Skip duplicates (same image referenced multiple times)
+            xref = img_info[0]
             if xref in seen_xrefs:
                 continue
             seen_xrefs.add(xref)
@@ -93,12 +105,8 @@ class ImageExtractor:
             if block:
                 image_blocks.append(block)
 
-        # Sort top-to-bottom by estimated position
         image_blocks.sort(key=lambda b: b.space_before)
-
-        logger.debug(
-            "Page %d: extracted %d images.", page_number, len(image_blocks)
-        )
+        logger.debug("Page %d: extracted %d images.", page_number, len(image_blocks))
         return image_blocks
 
     # ------------------------------------------------------------------

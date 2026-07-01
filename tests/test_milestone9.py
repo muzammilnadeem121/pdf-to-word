@@ -215,8 +215,9 @@ class TestTableDetector:
 
         mock_table = MagicMock()
         mock_table.extract.return_value = [
-            [None, "B"],
-            ["C",  None],
+            [None,  "عنوان", "قیمت"],   # 3 columns, only 1 None
+            ["قلم", "اردو",  None  ],   # 1 None
+            ["کتاب","متن",   "٢٠٠" ],   # all filled
         ]
         mock_table.bbox = (0, 0, 300, 100)
 
@@ -224,8 +225,9 @@ class TestTableDetector:
         mock_page.find_tables.return_value = [mock_table]
 
         blocks = TableDetector().extract_page_tables(mock_page, 1)
-        assert blocks[0].table_data[0][0] == ""
-        assert blocks[0].table_data[1][1] == ""
+        assert len(blocks) == 1
+        assert blocks[0].table_data[0][0] == ""   # None → ""
+        assert blocks[0].table_data[1][2] == ""   # None → ""
 
     def test_exception_returns_empty_list(self):
         from layout.table_detector import TableDetector
@@ -278,9 +280,11 @@ class TestExportLayoutM9:
         from docx import Document
         blocks = [
             LayoutBlock(text="عنوان", block_type=BlockType.HEADING,
-                        page_number=1, heading_level=1, is_rtl=True),
+                        page_number=1, heading_level=1, is_rtl=True,
+                        background_color=None, border_color=None),
             LayoutBlock(text="متن",   block_type=BlockType.BODY,
-                        page_number=1, is_rtl=True),
+                        page_number=1, is_rtl=True,
+                        background_color=None, border_color=None),
             LayoutBlock(text="",      block_type=BlockType.TABLE,
                         page_number=1,
                         table_data=[["خانہ ایک", "خانہ دو"]]),

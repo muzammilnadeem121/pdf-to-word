@@ -316,49 +316,128 @@ class WordExporter:
         return str(out)
 
     def _write_layout_heading(self, doc: Document, block: LayoutBlock) -> None:
-        """Write a heading block using Word's built-in Heading styles."""
-        level = block.heading_level or 2
-        level = max(1, min(level, 3))  # clamp to 1–3
-
-        para = doc.add_heading(level=level)
+        """
+        Write a heading block, reproducing any background color or border
+        detected from the source PDF's vector graphics.
+        """
+        level = max(1, min(block.heading_level or 2, 3))
+        para = doc.add_paragraph()
         _set_paragraph_rtl(para)
-
-        if block.alignment == Alignment.CENTER:
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        else:
-            para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
+        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        para.paragraph_format.space_before = Pt(8)
+        para.paragraph_format.space_after  = Pt(4)
+        # Apply detected background color (the actual box color from PDF)
+        if block.background_color:
+            self._apply_paragraph_shading(para, block.background_color)
+        # Apply detected border
+        if block.border_color and block.border_width > 0:
+            self._apply_paragraph_border(para, block.border_color, block.border_width)
         run = para.add_run(block.text)
         run.font.name = self.font_name
-        if block.font_size:
-            run.font.size = Pt(block.font_size)
+        run.font.bold = True
+        run.font.size = Pt(
+            block.font_size if block.font_size
+            else {1: 18, 2: 15, 3: 13}.get(level, 13)
+        )
+        # Use detected text color, or auto-pick based on background luminance
+        if block.text_color:
+            run.font.color.rgb = RGBColor(*block.text_color)
+        elif block.background_color:
+            run.font.color.rgb = self._contrast_text_color(block.background_color)
         _set_run_rtl(run)
-
     def _write_layout_paragraph(self, doc: Document, block: LayoutBlock) -> None:
-        """Write a body/caption block with spacing, bold, italic."""
+        """
+        Write a body paragraph, reproducing background and border from PDF.
+        """
         para = doc.add_paragraph()
         _set_paragraph_rtl(para)
 
-        # Paragraph spacing
         if block.space_before > 0:
-            para.paragraph_format.space_before = Pt(
-                min(block.space_before, 24)  # cap at 24pt
-            )
+            para.paragraph_format.space_before = Pt(min(block.space_before, 24))
 
-        # Alignment
-        if block.alignment == Alignment.CENTER:
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        elif block.alignment == Alignment.LEFT:
+        if not block.is_rtl and block.alignment == Alignment.LEFT:
             para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        else:
-            para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        elif not block.is_rtl and block.alignment == Alignment.CENTER:
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Apply detected background and border
+        if block.background_color:
+            self._apply_paragraph_shading(para, block.background_color)
+        if block.border_color and block.border_width > 0:
+            self._apply_paragraph_border(para, block.border_color, block.border_width)
 
         run = para.add_run(block.text)
-        run.font.name  = self.font_name
-        run.font.size  = Pt(block.font_size) if block.font_size else self.font_size
-        run.font.bold  = block.is_bold
+        run.font.name   = self.font_name
+        run.font.size   = Pt(block.font_size) if block.font_size else self.font_size
+        run.font.bold   = block.is_bold
         run.font.italic = block.is_italic
+
+        if block.text_color:
+            run.font.color.rgb = RGBColor(*block.text_color)
+        elif block.background_color:
+            run.font.color.rgb = self._contrast_text_color(block.background_color)
+
         _set_run_rtl(run)
+
+    # ------------------------------------------------------------------
+    # OOXML helpers for visual decoration
+    # ------------------------------------------------------------------
+
+    def _rgb_to_hex(self, rgb: tuple[int, int, int]) -> str:
+        """Convert (r, g, b) 0-255 tuple to OOXML hex string e.g. 'FF0000'."""
+        return "{:02X}{:02X}{:02X}".format(*rgb)
+
+    def _apply_paragraph_shading(self, paragraph, rgb: tuple[int, int, int]) -> None:
+        """
+        Apply a background fill color to a paragraph using OOXML <w:shd>.
+        This is the only way to set paragraph background in python-docx.
+        """
+        pPr = paragraph._p.get_or_add_pPr()
+        # Remove existing shading
+        for existing in pPr.findall(qn("w:shd")):
+            pPr.remove(existing)
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"),   "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"),  self._rgb_to_hex(rgb))
+        pPr.append(shd)
+
+    def _apply_paragraph_border(
+        self,
+        paragraph,
+        rgb:   tuple[int, int, int],
+        width: float,
+    ) -> None:
+        """
+        Apply borders to a paragraph using OOXML <w:pBdr>.
+        Width is converted from PDF points to OOXML eighths-of-a-point.
+        """
+        pPr    = paragraph._p.get_or_add_pPr()
+        pBdr   = OxmlElement("w:pBdr")
+        hex_color = self._rgb_to_hex(rgb)
+        # OOXML border size is in 1/8 pt; clamp between 2 and 18
+        size = max(2, min(int(width * 8), 18))
+
+        for side in ("top", "left", "bottom", "right"):
+            border = OxmlElement(f"w:{side}")
+            border.set(qn("w:val"),   "single")
+            border.set(qn("w:sz"),    str(size))
+            border.set(qn("w:space"), "4")
+            border.set(qn("w:color"), hex_color)
+            pBdr.append(border)
+
+        pPr.append(pBdr)
+
+    def _contrast_text_color(
+        self, background_rgb: tuple[int, int, int]
+    ) -> RGBColor:
+        """
+        Return white or black text depending on background luminance.
+        Uses the WCAG relative luminance formula.
+        """
+        r, g, b = (c / 255.0 for c in background_rgb)
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return RGBColor(255, 255, 255) if luminance < 0.5 else RGBColor(0, 0, 0)
 
     def _write_image_block(self, doc: Document, block: LayoutBlock) -> None:
         """
