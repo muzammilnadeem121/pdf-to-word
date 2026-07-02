@@ -1,0 +1,265 @@
+/* src/index.css */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f7f7f8;
+  color: #1a1a1a;
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.app__header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.app__header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.app__header p {
+  color: #666;
+  font-size: 15px;
+}
+
+/* Dropzone */
+
+.dropzone {
+  border: 2px dashed #c4c4c8;
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: #fff;
+}
+
+.dropzone:hover {
+  border-color: #008080;
+}
+
+.dropzone--active {
+  border-color: #008080;
+  background: #f0fafa;
+}
+
+.dropzone--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dropzone__icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.dropzone__text {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 4px;
+}
+
+.dropzone__hint {
+  font-size: 13px;
+  color: #888;
+  margin: 0;
+}
+
+/* Progress tracker */
+
+.progress-tracker {
+  background: #fff;
+  border-radius: 12px;
+  padding: 32px 24px;
+  border: 1px solid #e5e5e8;
+}
+
+.progress-tracker__filename {
+  font-weight: 600;
+  margin: 0 0 20px;
+  word-break: break-all;
+}
+
+.progress-tracker__steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.progress-tracker__step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #999;
+  font-size: 14px;
+}
+
+.progress-tracker__step--active {
+  color: #008080;
+  font-weight: 600;
+}
+
+.progress-tracker__step--complete {
+  color: #1a1a1a;
+}
+
+.progress-tracker__marker {
+  width: 20px;
+  text-align: center;
+}
+
+/* Download card */
+
+.download-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  border: 1px solid #e5e5e8;
+}
+
+.download-card__icon {
+  width: 48px;
+  height: 48px;
+  background: #008080;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  font-size: 24px;
+}
+
+.download-card__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.download-card__stats dt {
+  font-size: 12px;
+  color: #888;
+}
+
+.download-card__stats dd {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+
+.download-card__button {
+  display: inline-block;
+  background: #008080;
+  color: #fff;
+  padding: 12px 32px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.download-card__secondary {
+  display: block;
+  margin: 16px auto 0;
+  background: none;
+  border: none;
+  color: #666;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Error banner */
+
+.error-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fdecea;
+  color: #b3261e;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.error-banner button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* Progress tracker additions */
+
+.progress-tracker__filename {
+  font-weight: 500;
+  font-size: 15px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-break: break-all;
+}
+
+.progress-tracker__fileicon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.progress-tracker__bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f2;
+}
+
+.progress-tracker__bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #f0f0f2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-tracker__bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #008080;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-tracker__pct {
+  font-size: 13px;
+  font-weight: 500;
+  color: #008080;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Active step pulse animation */
+.progress-tracker__step--active .progress-tracker__marker {
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
